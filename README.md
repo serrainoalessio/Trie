@@ -1,5 +1,6 @@
 # Trie
-Trie data structure, full support for multithread (compile with -lphtread).
+Implementation of a Trie data structure (https://en.wikipedia.org/wiki/Trie), with full support for multithread (compile with -lphtread). Two or more thread may add or search data at the same time without any conflict.
+
 Future versions will have a switch for pthread.
 
 ## Usage:
@@ -27,6 +28,11 @@ Future versions will have a switch for pthread.
 See the test main file provided for an example of implementation
 
 And remember to include "trie.h".
+
+## TODO
+    IMPORTANT: a function to remove data
+    IMPORTANT: a backward iterator
+    IMPORTANT: C++ binding
 
 ## Feedback
 

@@ -21,7 +21,7 @@ Future versions will have a switch for pthread.
                        trie_iterator_data(&data)); // Underlayng data
     } // trie next_iterator_returns 0 when no other data is aviable
     
-    tire_init_iterator(&iter); // Destroys iterator
+    tire_destroy_iterator(&iter); // Destroys iterator
     trie_clear(&trie); // Destroys all the data
     
 See the test main file provided for an example of implementation

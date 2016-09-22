@@ -303,7 +303,16 @@ void trie_add(trie_ptr_t t, const DATA_t * arr, int len) {
     // print_trie(t); // debug purpose
 }
 
-// TODO: remove data from trie
+// =====================
+// ==== TRIE REMOVE ====
+// =====================
+
+// TODO: this function
+// This is still a work in progress
+
+// ===================
+// ==== TRIE FIND ====
+// ===================
 
 int trie_find(trie_ptr_t t, const DATA_t * arr, int len) {
     int mismatch; // data counter
@@ -354,11 +363,102 @@ int trie_find(trie_ptr_t t, const DATA_t * arr, int len) {
 
                 retval = 0;
                 break;
-            } else { // Normal case
+            } else { // Both mismatches in the middle of the data
                 assert(mismatch < trie_data_len(cur));
                 assert(mismatch < len);
 
                 retval = 0;
+                break;
+            }
+            assert(0);
+            __builtin_unreachable();
+        } // end while
+    }
+
+    trie_unlock(&(cur->lock));
+    return retval;
+}
+
+// ============================
+// ===    TRIE GET SUFFIX   ===
+// ============================
+
+int trie_get_suffix(trie_ptr_t t, const DATA_t * arr, int len, trie_arr_t * suffix) {
+    int mismatch; // data counter
+    int retval;
+    int a_id, b_id; // identifiers
+    struct _trie * cur, * next; // current root pointer (not reallocable)
+
+    if (t == NULL)
+        return TRIE_NO_SUFFIX_FOUND; // Invalid ptr
+
+    trie_readlock(&(t->lock)); // locks root trie read mutex
+    if (trie_is_empty(t)) {
+        retval = TRIE_NO_SUFFIX_FOUND; // Empty trie
+    } else { // Trie not empty (general case)
+        cur = t;
+        while (1) {
+            // Looks for the first mismatching character
+            mismatch = find_first_mismatch(arr, len, trie_data(cur), trie_data_len(cur));
+
+            // Now parse
+            if ((mismatch == trie_data_len(cur)) && (mismatch == len)) { // Reached end of data, and end of node
+                if (trie_data_end(cur)) { // Data ends here
+                    // Asserts there are no childs
+                    if (trie_empty_childs(cur)) { // Suffix has no lenght
+                        if (suffix != NULL)
+                                trie_arr_len(suffix) = 0;
+                        retval = TRIE_SUFFIX_FOUND; 
+                    } else { // Not univocal way of interpretation
+                        retval = TRIE_NO_SUFFIX_FOUND;
+                    }
+                } else { // Date does not ends here.
+                    assert(!trie_empty_childs(cur)); // Because of non ending data
+                    assert(trie_get_child_num(cur) != 1); // A non-ending node may not have one child
+                    retval = TRIE_MULTIPLE_SUFFIX;
+                }
+                break;
+            } else if ( (mismatch == trie_data_len(cur)) // Reached end of stored data
+                        && trie_empty_childs(cur) ) { // And has no childs
+                assert(len > mismatch); // there is always a next character
+                assert(trie_data_end(cur)); // Because of empty childs
+                retval = TRIE_NO_SUFFIX_FOUND; // Not found
+                break; // End
+            } else if (mismatch == trie_data_len(cur)) { // Reached end of stored data, has childs
+                // Let's start by binary searching the next character inside the childs
+                assert(mismatch < len); //  there is always a next character, so can access arr[mismatch]
+                a_id = trie_search_in_childs(&b_id, &(cur->childs), arr[mismatch]); // Binary search in child nodes
+                if (a_id) { // Element was found, calls to add now became recursive ...
+                    next = trie_get_child(cur, b_id); // New data should be added here
+                    trie_readlock(&(next->lock)); // Readlocks next.
+                    trie_unlock(&(cur->lock)); // Unlocks current. N.B. Keep order
+                    arr += (mismatch + 1); // Moves forward the array data
+                    len -= (mismatch + 1);
+                    cur = next;
+                    continue; // Continues while loop
+                } else { // Element was not found, inserts a new one
+                    retval = TRIE_NO_SUFFIX_FOUND;
+                    break;
+                }
+            } else if (mismatch == len) { // Middle of the data, data is longer than search
+                assert(mismatch < trie_data_len(cur)); // Less, not less or equal
+                if (trie_data_end(cur)) { // Data ends here!
+                    if (suffix != NULL) { // if suffix == NULL, do not copy data, only returns the value
+                        trie_arr_len(suffix) = trie_data_len(cur) - mismatch; // stores the remaining part of the data
+                        trie_arr_data(suffix) = realloc(trie_arr_data(suffix), trie_arr_len(suffix)*sizeof*trie_arr_data(suffix));
+                        memcpy(trie_arr_data(suffix), trie_data(cur) + mismatch, trie_arr_len(suffix)*sizeof*trie_data(cur)); // Copies the rest of the data
+                    }
+                    retval = TRIE_SUFFIX_FOUND;
+                } else { // Data does not end with this node
+                    assert(!trie_empty_childs(cur)); // Because of non end data
+                    assert(trie_get_child_num(cur) != 1); // A non-ending node may not have one child
+                    retval = TRIE_MULTIPLE_SUFFIX;
+                }
+                break;
+            } else { // Both mismatches in middle, it is not possible to have a suffix
+                assert(mismatch < trie_data_len(cur));
+                assert(mismatch < len);
+                retval = TRIE_NO_SUFFIX_FOUND;
                 break;
             }
             assert(0);
@@ -480,15 +580,15 @@ int trie_next_iterator_helper(trie_ptr_t t, trie_iterator_t * iterator, int cur_
     }
 }
 
-int trie_next_iterator(trie_ptr_t t, trie_iterator_t * iterator) {
+int trie_iterator_next(trie_ptr_t t, trie_iterator_t * iterator) {
     int res;
     
-    if (t == NULL) // Invalid pointer
+    if (t == NULL || iterator == NULL) // Invalid pointers
         return 0;
 
     trie_readlock(&(t->lock)); // Readlocks next.
     if (trie_is_empty(t)) {
-        trie_destroy_iterator(iterator);
+        trie_iterator_clear(iterator);
         trie_unlock(&(t->lock)); // Readlocks next.
         res = 0;
     } else if (iterator->data == NULL) { // First time here, gets the first
@@ -497,7 +597,7 @@ int trie_next_iterator(trie_ptr_t t, trie_iterator_t * iterator) {
     } else { // Normal
         res = trie_next_iterator_helper(t, iterator, 0);
         if (res == 0) // Reached last element
-            trie_destroy_iterator(iterator);
+            trie_iterator_clear(iterator);
         trie_unlock(&(t->lock)); // Readlocks next.
     }
 

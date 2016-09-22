@@ -188,9 +188,9 @@ static inline void dump(trie_ptr_t ptr, int my_tid, const char * msg) {
 static inline void print_trie(trie_ptr_t ptr) {
     int res;
     trie_iterator_t iter;
-    trie_init_iterator(&iter);
+    trie_iterator_init(&iter);
 
-    while (trie_next_iterator(ptr, &iter)) {
+    while (trie_iterator_next(ptr, &iter)) {
         printf("%.*s", trie_iterator_len(&iter), (char*)trie_iterator_data(&iter));
         printf(" (%d)\n", trie_iterator_len(&iter));
         // Now searches the data inside the trie
@@ -206,7 +206,7 @@ static inline void print_trie(trie_ptr_t ptr) {
         }
     }
 
-    trie_destroy_iterator(&iter);
+    trie_iterator_clear(&iter);
 }
 
 int my_get_tid(void) {

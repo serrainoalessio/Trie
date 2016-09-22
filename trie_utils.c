@@ -71,7 +71,7 @@ void trie_attach_first_data(struct _trie * t, int pos, DATA_t new_data) {
 #define trie_empty_childs(t)   (trie_get_child_num(t) == 0)
 #define trie_get_first(t, pos) trie_get_firsts(t)[pos]
 #define trie_get_child(t, pos) trie_get_childs(t)[pos]
-#define trie_is_root(t, node)  (t == node)
+#define trie_is_root(t, node)  (t == node) // First is a trie, second is a node
 
 static inline
 void trie_init_new_child(struct _trie * t, int pos) { // Inits a new empty child, without data
@@ -99,16 +99,25 @@ void trie_destroy_data(struct _trie * const t) {
         free((DATA_t*)t->data.data);
 }
 
-void trie_init_iterator(trie_iterator_t * iterator) {
-    iterator->data = NULL;
-    iterator->len = 0;
+void trie_arr_init(trie_arr_t * arr) {
+    arr->data = NULL;
+    arr->len = 0;
 }
 
-void trie_destroy_iterator(trie_iterator_t * iterator) {
-    free(iterator->data);
-    iterator->data = NULL;
-    iterator->len = 0;
+void trie_arr_clear(trie_arr_t * arr) {
+    free(arr->data);
+    arr->data = NULL;
+    arr->len = 0;
 }
+
+void trie_iterator_init(trie_iterator_t * iterator) {
+    trie_arr_init(iterator); // They are typedef for the same type
+}
+
+void trie_iterator_clear(trie_iterator_t * iterator) {
+    trie_arr_clear(iterator); // They are typedef for the same type
+}
+
 // Reallocs to new data len, and increases data len, then copies current node data
 #define iterator_substitute_end(iterator, offset, new_data, new_data_len)                           \
     iterator->data = realloc(iterator->data, ((offset) + (new_data_len))*sizeof*(iterator->data));  \

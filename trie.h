@@ -41,23 +41,36 @@ struct _trie {
 typedef struct _trie trie_t;
 typedef struct _trie * trie_ptr_t;
 
+// data representing an array for the trie
+typedef struct {
+    DATA_t * data;
+    int len;
+} trie_arr_t;
+#define trie_arr_len(t) (t)->len
+#define trie_arr_data(t) (t)->data
+
 // Init/destroy utilities
 void trie_init(trie_ptr_t t);
 void trie_clear(trie_ptr_t t); // deletes every element from the trie
 
-// Tee utils
+void trie_arr_init(trie_arr_t * arr); // Inits a trie array
+void trie_arr_clear(trie_arr_t * arr); // Clears a trie array
+
+// Trie utils
 void trie_add(trie_ptr_t t, const DATA_t * arr, int len); // adds an elemente to the trie
 int trie_find(trie_ptr_t t, const DATA_t * arr, int len); // searches for an element in the trie
                                                           // returns 1 if it exist, otherwise 0
-typedef struct {
-    DATA_t * data;
-    int len;
-} trie_iterator_t;
+#define TRIE_SUFFIX_FOUND     0 // Normal return value
+#define TRIE_NO_SUFFIX_FOUND  1 // Base for the suffix was not found
+#define TRIE_MULTIPLE_SUFFIX -1 // Found more than one suffix
+int trie_get_suffix(trie_ptr_t t, const DATA_t * arr, int len, trie_arr_t * suffix);
+
+typedef trie_arr_t trie_iterator_t;
 #define trie_iterator_len(t) (t)->len
 #define trie_iterator_data(t) (t)->data
 
-void trie_init_iterator(trie_iterator_t * iterator);
-void trie_destroy_iterator(trie_iterator_t * iterator);
-int trie_next_iterator(trie_ptr_t t, trie_iterator_t * iterator); // 1 if success, 0 if reached the end
+void trie_iterator_init(trie_iterator_t * iterator);
+void trie_iterator_clear(trie_iterator_t * iterator);
+int trie_iterator_next(trie_ptr_t t, trie_iterator_t * iterator); // 1 if success, 0 if reached the end
 
 #endif // TRIE_H defined

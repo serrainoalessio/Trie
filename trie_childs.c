@@ -137,3 +137,11 @@ void trie_insert_child(struct _childs * const childs, const int new_pos) {
     memmove((childs->childs) + new_pos + 1, (childs->childs) + new_pos, ((childs->child_num) - new_pos - 1)*sizeof*(childs->childs));
     memmove((childs->firsts )+ new_pos + 1, (childs->firsts) + new_pos, ((childs->child_num) - new_pos - 1)*sizeof*(childs->firsts));
 }
+
+static inline
+void trie_remove_child(struct _childs * const childs, const int old_pos) { // This never reduces the size of the childs
+    if (childs->child_num == 0) return; // Should not happen
+    childs->child_num--; // One removed
+    memmove((childs->childs) + old_pos, (childs->childs) + old_pos + 1, ((childs->child_num) - old_pos)*sizeof*(childs->childs));
+    memmove((childs->firsts )+ old_pos, (childs->firsts) + old_pos + 1, ((childs->child_num) - old_pos)*sizeof*(childs->firsts));
+}

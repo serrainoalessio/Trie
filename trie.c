@@ -58,10 +58,7 @@ void trie_clear(trie_ptr_t t) {
     // Now have to destroy each child
     for (i = 0; i < trie_get_child_num(t); i++)
         trie_clear(trie_get_child(t, i));
-    trie_destroy_childs(&(t->childs));
-    trie_destroy_data(t); // Clears data
-    trie_unlock(&(t->lock));
-    trie_destroy_mutex(&(t->lock));
+    trie_destroy_node_without_child(t);
 }
 
 #ifndef NDEBUG // Debugging
@@ -143,11 +140,12 @@ void trie_add_helper(trie_ptr_t t, const DATA_t * arr, int len){
     cur = t;
     while (1) {
         assert(trie_correct_child_num(cur)); // Effectively used chidls less than allocated
-        // Looks for the first mismatching character
+        // Looks for the first mismatching character. It is right to search again if lock was not acquired
         mismatch = find_first_mismatch(arr, len, trie_data(cur), trie_data_len(cur));
 
         // Now parse
         if ((mismatch == trie_data_len(cur)) && (mismatch == len)) { // Reached end of data, and end of node
+            if (trie_data_end(cur)) break; // Element already exists
             if (trie_upgrade_lock(&(cur->lock)) != 0) // Lock gained, do what to do
                 continue;
             trie_set_data_end(cur); // simply sets the end flag, finish
@@ -282,7 +280,7 @@ void trie_add_helper(trie_ptr_t t, const DATA_t * arr, int len){
 void trie_add(trie_ptr_t t, const DATA_t * arr, int len) {
     int upgrade_res;
 
-    if (t == NULL)
+    if ((t == NULL) || (arr == NULL))
         return; // Invalid ptr
 
     trie_readlock_upgrd(&(t->lock)); // locks root trie read mutex, upgadable
@@ -307,8 +305,134 @@ void trie_add(trie_ptr_t t, const DATA_t * arr, int len) {
 // ==== TRIE REMOVE ====
 // =====================
 
-// TODO: this function
-// This is still a work in progress
+void trie_remove(trie_ptr_t t, const DATA_t * arr, int len) {
+    int mismatch; // data counter
+    int found, pos; // Data search index
+    struct _childs temp_childs; // Temporany data holder
+    struct _trie * cur, * next; // current root pointer (not reallocable)
+    struct _trie * prev; // Previous used node
+    
+    int newlen; // Temporany new data lenght
+    DATA_t * newdata; // Temporany data holder
+
+    // Basic checking
+    if (t == NULL || arr == NULL)
+        return; // No data to delete!
+
+    trie_readlock_upgrd(&(t->lock)); // locks root trie read mutex, upgadable
+    if (trie_is_empty(t)) { // No data to delete
+        trie_unlock(&(t->lock));
+        return;
+    }
+
+    cur = prev = t;
+    while (1) {
+        assert(trie_correct_child_num(cur)); // Effectively used chidls less than allocated
+        // Looks for the first mismatching character
+        mismatch = find_first_mismatch(arr, len, trie_data(cur), trie_data_len(cur));
+
+        // Now parse
+        if ((mismatch == trie_data_len(cur)) && (mismatch == len)) { // Reached end of data, and end of node
+            if (trie_data_end(cur) == 0) {
+                assert(!trie_empty_childs(cur)); // Should be at least one child
+                break; // Data does not exist, do not remove nothing
+            }
+            
+            if (trie_upgrade_lock(&(cur->lock)) != 0) // Lock gained, now cur is readlocked
+                continue; // Needs to read again the data
+
+            if (trie_get_child_num(cur) >= 2) { // More than two childs, cannot remove node
+                trie_clear_data_end(cur); // simply clears the end flag, finish
+                trie_unlock(&(cur->lock)); // Unlocks current node
+            } else if (trie_get_child_num(cur) == 1) { // Must merge the only child
+                next = trie_get_child(cur, 0); // Sets next to the only child
+                // need a readlock on the child
+                trie_readlock(&(next->lock)); // Gains readlock
+                newlen = trie_data_len(cur) + trie_data_len(next) + 1; // +1 is for the first character
+                
+                if (!(cur->data.dealloc) && !(next->data.dealloc) &&
+                        trie_data(cur) + trie_data_len(cur) + 1 == trie_data(next) ) {
+                    // Do nothing!, data is already where it should be
+                    assert(trie_data(cur)[trie_data_len(cur)] == trie_get_first(cur, 0));
+                } else { // Data was allocated, copies inside this buffer
+                    if (cur->data.dealloc) { // Reallocs current data
+                        trie_data(cur) = realloc((DATA_t*)trie_data(cur), newlen*sizeof*trie_data(cur));
+                    } else { // Data for current node is not allocated, must malloc all the data
+                        newdata = malloc(newlen*sizeof*trie_data(cur)); // Allocs a new chunk of data
+                        assert(newdata); // This is a bit like attach data, but this adds some extra bytes at the end
+                        cur->data.dealloc = 1; // needs freeing
+                        memcpy(newdata, trie_data(cur), trie_data_len(cur)*sizeof*trie_data(cur)); // Copies old data
+                        trie_data(cur) = newdata; // Links new data
+                    }
+                    memcpy((DATA_t*)trie_data(cur) + trie_data_len(cur), &trie_get_first(cur, 0),
+                            sizeof*trie_data(cur)); // Copies the first byte
+                    memcpy((DATA_t*)trie_data(cur) + trie_data_len(cur) + 1, trie_data(next), // Copies the rest
+                            trie_data_len(next)*sizeof*trie_data(cur));
+                }
+                trie_data_len(next) = newlen;
+                trie_data(next) = trie_data(cur); // attaches current data to child
+                next->data.dealloc = cur->data.dealloc; // innherits dealloc property
+                // now links the child node to the parent
+                trie_get_child(prev, pos) = next;
+
+                // Now destroys current node (and frees the readlock)
+                trie_destroy_node_without_child(cur); // Destroys all allocs for the current node
+                if (!trie_is_root(t, cur)) 
+                    free(cur);
+
+                trie_unlock(&(next->lock)); // Lock no more needed
+            } else { // No childs
+                // Now destroys the current node. no child is allocated.
+                trie_destroy_node_without_child(cur); // Destroys all allocs for the current node
+                if (!trie_is_root(t, cur)) { // Root node, uses a special algorithm 
+                    // If not the root can unlink from the prior
+                    free(cur); // cur was allocated with malloc
+                    trie_remove_child(&(prev->childs), pos);
+                } else { // cur is the root node, needs to reset back to void root
+                    trie_get_childs(cur) = NULL;
+                    trie_get_child_num(cur) = 0;
+                    cur->childs.child_alloc = 0;
+                }
+            }
+
+            break;
+        } else if ( (mismatch == trie_data_len(cur)) && trie_empty_childs(cur) ) { // Reached end of stored data
+            assert(len > mismatch); // there is always a next character
+            assert(trie_data_end(cur)); // Beacuse of empty childs
+            break; // Element does not exist
+        } else if (mismatch == trie_data_len(cur)) { // Reached end of stored data, has childs
+            // Let's start by binary searching the next character inside the childs
+            assert(mismatch < len); //  there is always a next character, so can access arr[mismatch]
+            found = trie_search_in_childs(&pos, &(cur->childs), arr[mismatch]); // Binary search in child nodes
+            if (found) { // Element was found, calls to add now became recursive ...
+                next = trie_get_child(cur, pos); // Moves to the next node
+                if (!trie_is_root(t, cur)) // True every time except the first here
+                    trie_unlock(&(prev->lock)); // Unlocks previous. N.B. Keep order
+                else; // If trie root node do not unlocks anything!
+                trie_readlock_upgrd(&(next->lock)); // Readlocks next, with an upgradable lock
+                arr += (mismatch + 1); // Moves forward the array data
+                len -= (mismatch + 1);
+                prev = cur; // Stores the current node
+                cur = next; // and moves to the nexe
+                continue; // Continues while loop
+            } else { // Element was not found, inserts a new one
+                break; // Element does not exists
+            }
+        } else if (mismatch == len) {
+            assert(mismatch < trie_data_len(cur));
+            break; // Element does not exists
+        } else { // Normal case
+            assert(mismatch < trie_data_len(cur));
+            assert(mismatch < len);
+            break; // Element does not exists
+        }
+        assert(0);
+        __builtin_unreachable();
+    } // end while
+
+    assert(trie_correct_child_num(prev)); // Effectively used chidls less than allocated
+    trie_unlock(&(prev->lock));
+}
 
 // ===================
 // ==== TRIE FIND ====

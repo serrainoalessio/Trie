@@ -99,6 +99,16 @@ void trie_destroy_data(struct _trie * const t) {
         free((DATA_t*)t->data.data);
 }
 
+// WARNING: Never call this unless childs are fully freed
+static inline
+void trie_destroy_node_without_child(struct _trie * const t) {
+    // N.B. t must be readlocked
+    trie_destroy_childs(&(t->childs));
+    trie_destroy_data(t); // Clears data
+    trie_unlock(&(t->lock)); // t must be readlocked
+    trie_destroy_mutex(&(t->lock));
+}
+
 void trie_arr_init(trie_arr_t * arr) {
     arr->data = NULL;
     arr->len = 0;

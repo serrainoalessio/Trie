@@ -308,7 +308,6 @@ void trie_add(trie_ptr_t t, const DATA_t * arr, int len) {
 void trie_remove(trie_ptr_t t, const DATA_t * arr, int len) {
     int mismatch; // data counter
     int found, pos; // Data search index
-    struct _childs temp_childs; // Temporany data holder
     struct _trie * cur, * next; // current root pointer (not reallocable)
     struct _trie * prev; // Previous used node
     
@@ -408,7 +407,7 @@ void trie_remove(trie_ptr_t t, const DATA_t * arr, int len) {
                 next = trie_get_child(cur, pos); // Moves to the next node
                 if (!trie_is_root(t, cur)) // True every time except the first here
                     trie_unlock(&(prev->lock)); // Unlocks previous. N.B. Keep order
-                else; // If trie root node do not unlocks anything!
+                else {}; // If trie root node do not unlocks anything!
                 trie_readlock_upgrd(&(next->lock)); // Readlocks next, with an upgradable lock
                 arr += (mismatch + 1); // Moves forward the array data
                 len -= (mismatch + 1);
@@ -623,6 +622,8 @@ void trie_get_first_iterator(trie_ptr_t t, trie_iterator_t * iterator, int offse
         trie_unlock(&(cur->lock)); // Unlocks current. N.B. Keep order
         cur = next;
     }
+
+    assert(iterator->len <= iterator->alloc);
 }
 
 static inline
@@ -715,7 +716,8 @@ int trie_iterator_next(trie_ptr_t t, trie_iterator_t * iterator) {
         trie_iterator_clear(iterator);
         trie_unlock(&(t->lock)); // Readlocks next.
         res = 0;
-    } else if (iterator->data == NULL) { // First time here, gets the first
+    } else if (trie_iterator_first_iterator(iterator)) { // First time here, gets the first
+        trie_iterator_use_iterator(iterator); // This way does not execute this code next time
         trie_get_first_iterator(t, iterator, 0); // Auto unlocks
         res = 1;
     } else { // Normal

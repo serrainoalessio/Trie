@@ -43,8 +43,9 @@ typedef struct _trie * trie_ptr_t;
 
 // data representing an array for the trie
 typedef struct {
-    DATA_t * data;
-    int len;
+    DATA_t * data; // dynamic array
+    int len; // lenght of the data
+    int alloc; // effectively allocated chunks
 } trie_arr_t;
 #define trie_arr_len(t) (t)->len
 #define trie_arr_data(t) (t)->data

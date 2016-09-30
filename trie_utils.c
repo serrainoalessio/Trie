@@ -111,13 +111,13 @@ void trie_destroy_node_without_child(struct _trie * const t) {
 
 void trie_arr_init(trie_arr_t * arr) {
     arr->data = NULL;
-    arr->len = 0;
+    arr->len = arr->alloc = 0;
 }
 
 void trie_arr_clear(trie_arr_t * arr) {
     free(arr->data);
     arr->data = NULL;
-    arr->len = 0;
+    arr->len = arr->alloc = 0;
 }
 
 void trie_iterator_init(trie_iterator_t * iterator) {
@@ -129,7 +129,18 @@ void trie_iterator_clear(trie_iterator_t * iterator) {
 }
 
 // Reallocs to new data len, and increases data len, then copies current node data
-#define iterator_substitute_end(iterator, offset, new_data, new_data_len)                           \
-    iterator->data = realloc(iterator->data, ((offset) + (new_data_len))*sizeof*(iterator->data));  \
-    iterator->len = (offset) + (new_data_len);                                                      \
-    memcpy(iterator->data + (offset), new_data, (new_data_len)*sizeof*(iterator->data))
+static inline
+void iterator_substitute_end(trie_iterator_t * iterator, int offset, const DATA_t * new_data, int new_data_len) {
+    if (offset + new_data_len > iterator->alloc) {
+        iterator->data = realloc(iterator->data, (offset + new_data_len)*sizeof*(iterator->data));
+        iterator->alloc = offset + new_data_len;
+    }
+
+    iterator->len = offset + new_data_len;
+    memcpy(iterator->data + offset, new_data, (new_data_len)*sizeof*(iterator->data));
+}
+
+#define trie_iterator_first_iterator(iterator) iterator->alloc == 0
+#define trie_iterator_use_iterator(iterator)                                                            \
+        iterator->alloc = 1;                                                                            \
+        iterator->data = realloc(iterator->data, (iterator->alloc)*sizeof*(iterator->data))

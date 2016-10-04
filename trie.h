@@ -67,11 +67,12 @@ int trie_find(trie_ptr_t t, const DATA_t * arr, int len); // searches for an ele
 int trie_get_suffix(trie_ptr_t t, const DATA_t * arr, int len, trie_arr_t * suffix);
 
 typedef trie_arr_t trie_iterator_t;
-#define trie_iterator_len(t) (t)->len
-#define trie_iterator_data(t) (t)->data
+#define trie_iterator_data(iter)     (iter)->data
+#define trie_iterator_data_len(iter) (iter)->len
 
 void trie_iterator_init(trie_iterator_t * iterator);
 void trie_iterator_clear(trie_iterator_t * iterator);
 int trie_iterator_next(trie_ptr_t t, trie_iterator_t * iterator); // 1 if success, 0 if reached the end
+int trie_suffix_iterator_next(trie_ptr_t t, trie_arr_t trie_data, trie_iterator_t * iterator);
 
 #endif // TRIE_H defined

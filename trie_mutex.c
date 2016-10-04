@@ -29,7 +29,8 @@ void trie_readlock(struct _rwlock * rw) {
     assert(res == 0);
 #endif
     res = pthread_rwlock_rdlock(&(rw->rwlock));
-    assert(res == 0);
+    if (res != 0)
+        assert(res == 0);
 }
 
 static inline
@@ -75,7 +76,8 @@ int trie_upgrade_lock(struct _rwlock * rw) {
     assert(res == 0);
     res = pthread_mutex_unlock(&(rw->upgrade)); // Not needed anymore
     assert(res == 0);
-#else // defined USE_NOT_UPGRADABLE_MUTEX
+
+#else // defined USE_NOT_UPGRADABLE_MUTEX, mutex is already a writelock
     (void)rw; // Suppresses warning unused
     retval = 0; // Always success, expect to call upgrade lock on writelocks
 #endif

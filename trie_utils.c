@@ -130,7 +130,7 @@ void trie_iterator_clear(trie_iterator_t * iterator) {
 
 // Reallocs to new data len, and increases data len, then copies current node data
 static inline
-void iterator_substitute_end(trie_iterator_t * iterator, int offset, const DATA_t * new_data, int new_data_len) {
+void trie_iterator_substitute_end(trie_iterator_t * iterator, int offset, const DATA_t * new_data, int new_data_len) {
     if (offset + new_data_len > iterator->alloc) {
         iterator->data = realloc(iterator->data, (offset + new_data_len)*sizeof*(iterator->data));
         iterator->alloc = offset + new_data_len;

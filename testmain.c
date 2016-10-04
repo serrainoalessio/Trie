@@ -11,6 +11,7 @@
 #define MAX_LEN 12 // Maximum lenght of each string
 #define THREAD_NUM 32 // Threads adding
 #define REPS 200 // Number of strings each thread adds
+#define SUFFIX_REPS 200 // Number of suffix test strings
 
 pthread_mutex_t lock;
 pthread_t tid[THREAD_NUM]; // Starts eight threads
@@ -59,6 +60,7 @@ static inline char extract_rand_letter(int what) {
     }
 }
 
+// Extracts a string of exactly 'len' letters (without null terminator)
 static inline void get_rand_string(DATA_t * string, int len) {
     int vowel_last, type_to_extract;
     float switch_probab; // switching wovel-consonant
@@ -191,22 +193,64 @@ static inline void print_trie(trie_ptr_t ptr) {
     trie_iterator_init(&iter);
 
     while (trie_iterator_next(ptr, &iter)) {
-        printf("%.*s", trie_iterator_len(&iter), (char*)trie_iterator_data(&iter));
-        printf(" (%d)\n", trie_iterator_len(&iter));
-        // Now searches the data inside the trie
+        printf("%.*s", trie_iterator_data_len(&iter), (char*)trie_iterator_data(&iter));
+        printf(" (%d)\n", trie_iterator_data_len(&iter));
 
+        // Now searches the data inside the trie (for debug)
         res = trie_find(ptr, trie_iterator_data(&iter),
-                             trie_iterator_len(&iter));
+                             trie_iterator_data_len(&iter));
         if (res == 0) {
             char msg[32 + MAX_LEN];
             sprintf(msg, "Cannot find this added string: %.*s\n",
-                trie_iterator_len(&iter), (char*)trie_iterator_data(&iter));
+                trie_iterator_data_len(&iter), (char*)trie_iterator_data(&iter));
             dump(ptr, -1, msg); // This function should be called by main thread
             assert(0);
         }
     }
 
     trie_iterator_clear(&iter);
+}
+
+static inline void print_trie_starting_with(trie_ptr_t ptr) {
+    int res, datalen = (int)ceil(log(MAX_LEN));
+    trie_iterator_t iter;
+    trie_arr_t arr;
+    DATA_t str_to_search[MAX_LEN];
+    // Now extracts a random smaller string and lists all the data starting with that
+    
+    if ( (datalen != 0) &&
+         (my_rand() % 10 == 0) )
+        datalen--; // Randomly uses a shorter string
+    
+    get_rand_string(str_to_search, datalen);
+    printf("   === All data starting with %.*s\n", datalen, str_to_search);
+    
+    arr.data = str_to_search;
+    arr.len = datalen;
+    arr.alloc = datalen; // Formal
+    trie_iterator_init(&iter);
+
+    while (trie_suffix_iterator_next(ptr, arr, &iter)) {
+        printf("%.*s%.*s", datalen, str_to_search,
+                           trie_iterator_data_len(&iter), (char*)trie_iterator_data(&iter));
+        printf(" (%d)\n", datalen + trie_iterator_data_len(&iter));
+
+        // Now searches the data inside the trie (for debug)
+        // NOTE: the iterator contains only the suffix, so copies the whole data
+        memcpy(str_to_search + datalen, trie_iterator_data(&iter),
+               trie_iterator_data_len(&iter)*sizeof*str_to_search);
+        res = trie_find(ptr, str_to_search, datalen + trie_iterator_data_len(&iter));
+        if (res == 0) {
+            char msg[32 + MAX_LEN];
+            sprintf(msg, "Cannot find this added string: %.*s%.*s\n", datalen, str_to_search,
+                trie_iterator_data_len(&iter), (char*)trie_iterator_data(&iter));
+            dump(ptr, -1, msg); // This function should be called by main thread
+            assert(0);
+        }
+    }
+
+    trie_iterator_clear(&iter);
+    printf("   === End of all strings starting with %.*s\n", datalen, str_to_search);
 }
 
 int my_get_tid(void) {
@@ -358,9 +402,15 @@ int main(int argc, char * argv[]) {
     for (i = 0; i < THREAD_NUM; i++)
         pthread_mutex_destroy(&data_added_len_mutex[i]);
 
-    printf("   === All threads joined ===\n   === Final data structure: ===\n");
+    printf("   === All threads joined ===\n");
+    
+    printf("   === Final data structure: ===\n");
     print_trie(&my_trie);
     printf("\n");
+    fflush(stdout);
+    
+    for (i = 0; i < SUFFIX_REPS; i++) // Repeats many times!
+        print_trie_starting_with(&my_trie); // Works out a random prefix, etc...
 
     printf("   === end ===\n");
     fflush(stdout);

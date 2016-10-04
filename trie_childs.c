@@ -17,7 +17,7 @@
 */
 
 #include <stdlib.h> // malloc
-#include <string.h> // memmove
+#include <string.h> // memmove, memcmp
 #include <assert.h> // debugging
 #include <math.h> // ceil, may compile with -ffast-math
 #include <limits.h> // INT_MAX
@@ -80,10 +80,12 @@ void trie_destroy_childs(struct _childs * const childs) {
     childs->firsts = NULL;
 }
 
+// This function makes comparations with memcp
 static inline
 int trie_search_in_childs(int * const res, const struct _childs * const childs, const DATA_t to_search) {
     const DATA_t * begin, * end; // Data is searched into an array of DATA_t
     const DATA_t * mid;
+    int memcmp_res;
 
     // This function does not need to lock mutexes
     // because it actually doesn't read childs
@@ -93,13 +95,14 @@ int trie_search_in_childs(int * const res, const struct _childs * const childs, 
 
     while (begin < end) {
         mid = begin + (end - begin) / 2; // Gets the middle point
-        if (*mid > to_search) { // to_search may be before
+        memcmp_res = memcmp(mid, &to_search, sizeof(*mid));
+        if (memcmp_res > 0) { // to_search may be before (*mid > to_search)
             end = mid;
             continue; // next loop
-        } else if (*mid < to_search) { // to_search may be after
+        } else if (memcmp_res < 0) { // to_search may be after (*mid < to_search)
             begin = mid + 1; // Begin has been compared, skip to the next one
             continue; // next loop
-        } else { // exact match
+        } else { // exact match (*mid == to_search)
             *res = (mid - childs->firsts);
             return 1; // Element found
         }

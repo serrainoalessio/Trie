@@ -11,8 +11,10 @@ Future versions will have a switch for pthread.
     //        trie     string        lenght
     trie_add(&trie, "Hello World!", strlen("Hello World")); // Adds some data
     found = trie_find(&trie, "Hello World!", strlen("Hello World")); // Searches data added, returns int
-    if (found)
+    if (found) {
         // Data was found!
+    }
+    trie_remove(&trie, "Hello World", strlen("Hello World")); // Removes data
     
     trie_iterator_t iter; // Iterator for the trie
     tire_init_iterator(&iter); // Inits the iterator
@@ -30,9 +32,7 @@ See the test main file provided for an example of implementation
 And remember to include "trie.h".
 
 ## TODO
-    IMPORTANT: a function to remove data
-    IMPORTANT: a backward iterator
-    IMPORTANT: C++ binding
+    IMPORTANT: C++ binding, with templates
 
 ## Feedback
 

@@ -10,7 +10,7 @@
 
 #define MAX_LEN 12 // Maximum lenght of each string
 #define THREAD_NUM 32 // Threads adding
-#define REPS 200 // Number of strings each thread adds
+#define REPS 500 // Number of strings each thread adds
 #define SUFFIX_REPS 200 // Number of suffix test strings
 
 pthread_mutex_t lock;
@@ -212,7 +212,7 @@ static inline void print_trie(trie_ptr_t ptr) {
 }
 
 static inline void print_trie_starting_with(trie_ptr_t ptr) {
-    int res, datalen = (int)ceil(log(MAX_LEN));
+    int nfound, res, datalen = (int)ceil(log(MAX_LEN));
     trie_iterator_t iter;
     trie_arr_t arr;
     DATA_t str_to_search[MAX_LEN];
@@ -223,14 +223,16 @@ static inline void print_trie_starting_with(trie_ptr_t ptr) {
         datalen--; // Randomly uses a shorter string
     
     get_rand_string(str_to_search, datalen);
-    printf("   === All data starting with %.*s\n", datalen, str_to_search);
     
     arr.data = str_to_search;
     arr.len = datalen;
     arr.alloc = datalen; // Formal
     trie_iterator_init(&iter);
 
+    nfound = 0; // Number of elements found
     while (trie_suffix_iterator_next(ptr, arr, &iter)) {
+        if (nfound++ == 0) // Executes only the first time
+            printf("   === All data starting with %.*s\n", datalen, str_to_search); 
         printf("%.*s%.*s", datalen, str_to_search,
                            trie_iterator_data_len(&iter), (char*)trie_iterator_data(&iter));
         printf(" (%d)\n", datalen + trie_iterator_data_len(&iter));
@@ -250,7 +252,10 @@ static inline void print_trie_starting_with(trie_ptr_t ptr) {
     }
 
     trie_iterator_clear(&iter);
-    printf("   === End of all strings starting with %.*s\n", datalen, str_to_search);
+    if (nfound != 0)
+        printf("found: %d\n", nfound);
+//    if (nfound >= 2) // Do not print nothing if nothing was found
+//        printf("   === End of all strings starting with %.*s\n", datalen, str_to_search);
 }
 
 int my_get_tid(void) {
@@ -403,18 +408,22 @@ int main(int argc, char * argv[]) {
         pthread_mutex_destroy(&data_added_len_mutex[i]);
 
     printf("   === All threads joined ===\n");
+    printf("   === Final data structure: ===\n");
+    print_trie(&my_trie);
+    printf("\n");
+    fflush(stdout);
+     
+    for (i = 0; i < SUFFIX_REPS; i++) // Repeats many times!
+        print_trie_starting_with(&my_trie); // Works out a random prefix, etc...
+
+    printf("   === end ===\n");
     
     printf("   === Final data structure: ===\n");
     print_trie(&my_trie);
     printf("\n");
     fflush(stdout);
     
-    for (i = 0; i < SUFFIX_REPS; i++) // Repeats many times!
-        print_trie_starting_with(&my_trie); // Works out a random prefix, etc...
-
-    printf("   === end ===\n");
-    fflush(stdout);
-    trie_clear(&my_trie);
+    trie_clear(&my_trie); // Frees all the memory
     pthread_mutex_destroy(&lock);
 
     free(data_added);

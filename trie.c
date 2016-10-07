@@ -642,6 +642,7 @@ int trie_next_iterator_helper(trie_ptr_t t, trie_iterator_t * iterator, int cur_
             trie_get_first_iterator(next, iterator, cur_offset + trie_data_len(t) + 1);
             return 1; // Success, data modified
         } else {
+            assert(trie_data_end(t)); // Data must end here if no childs!
             return 0; // No childs!
         }
     } else if ( (mismatch == trie_data_len(t)) && trie_empty_childs(t) ) { // Reached end of stored data
@@ -672,16 +673,16 @@ int trie_next_iterator_helper(trie_ptr_t t, trie_iterator_t * iterator, int cur_
         trie_readlock(&(next->lock));
         trie_get_first_iterator(next, iterator, cur_offset + trie_data_len(t) + 1);
         return 1;
-    } else if (mismatch + cur_offset == trie_iterator_data_len(iterator)) { // End of the data, current data stored is longer
+    } else if (mismatch + cur_offset == trie_iterator_data_len(iterator)) { // End of the data, current iterator data is shorter
         assert(mismatch < trie_data_len(t));
         // Copies current data in the iterator, then gets first useful data
         trie_iterator_substitute_end(iterator, cur_offset + mismatch, trie_data(t) + mismatch, trie_data_len(t) - mismatch);
-        if (!trie_empty_childs(t)) {
+        if (!trie_data_end(t) && !trie_empty_childs(t)) {
             next = trie_get_child(t, 0);
-            trie_iterator_substitute_end(iterator, cur_offset + trie_data_len(t), // adds the first character
-                                         &(trie_get_first(t, pos + found?0:1 )), 1); // if found first at step before adds 0 
-            trie_readlock(&(next->lock));                                    // (i.e. use that character) else moves to the next
-            trie_get_first_iterator(next, iterator, cur_offset + trie_data_len(t) + 1);
+            trie_iterator_substitute_end(iterator, cur_offset + trie_data_len(t), // adds the first character of next iterator
+                                         &(trie_get_first(t, 0)), 1);     // unfortunately there is no way to get that from 'next'
+            trie_readlock(&(next->lock));
+            trie_get_first_iterator(next, iterator, cur_offset + trie_data_len(t) + 1); // Auto unlocks
         }
         return 1;
     } else { // mismatch in the middle of the data
@@ -693,12 +694,12 @@ int trie_next_iterator_helper(trie_ptr_t t, trie_iterator_t * iterator, int cur_
         } else { // cur->data[mismatch] > arr[mismatch], they can't be equal
             // Iterator goes before, do as the previous case
             trie_iterator_substitute_end(iterator, cur_offset + mismatch, trie_data(t) + mismatch, trie_data_len(t) - mismatch);
-            if (!trie_empty_childs(t)) {
+            if (!trie_data_end(t) && !trie_empty_childs(t)) {
                 next = trie_get_child(t, 0);
                 trie_iterator_substitute_end(iterator, cur_offset + trie_data_len(t), // adds the first character
-                                         &(trie_get_first(t, pos + found?0:1 )), 1); // Same as before for found
+                                         &(trie_get_first(t, 0)), 1);                 // Exactly as before
                 trie_readlock(&(next->lock));
-                trie_get_first_iterator(next, iterator, cur_offset + trie_data_len(t) + 1);
+                trie_get_first_iterator(next, iterator, cur_offset + trie_data_len(t) + 1); // Auto unlocks
             }
             return 1;
         }
@@ -785,14 +786,21 @@ int trie_suffix_iterator_next(trie_ptr_t t, trie_arr_t trie_data, trie_iterator_
                     else // Does a binary search for the first data inside childs
                         a_id = trie_search_in_childs(&b_id, &(cur->childs), trie_iterator_data(iterator)[0]);
                     
-                    if (b_id == trie_get_child_num(cur)) { // Reached the end, sets the iterator to null
+                    if (b_id >= trie_get_child_num(cur)) { // Reached the end, sets the iterator to null
                         retval = 0; // This forces clearing iterator (next)
                     } else { // Normal case
                         trie_readlock(&(trie_get_child(cur, b_id)->lock)); // Readlocks next first child
                         if (!a_id) // Not found, need to copy the first character
                             trie_iterator_substitute_end(iterator, 0, &trie_get_first(cur, b_id), 1); // only one character
-                        retval = trie_next_iterator_helper(trie_get_child(cur, b_id), iterator, 1); // Gets next iterator from that root
+                        retval = trie_next_iterator_helper(trie_get_child(cur, b_id), iterator, 1); // Gets next iterator from this root
                         trie_unlock(&(trie_get_child(cur, b_id)->lock)); // Readlocks next.
+                        if ((retval == 0) && (++b_id < trie_get_child_num(cur))) { // If not found and can move to next data
+                            trie_readlock(&(trie_get_child(cur, b_id)->lock)); // Readlocks the child we are going to use
+                            trie_iterator_substitute_end(iterator, 0, &trie_get_first(cur, b_id), 1); // only one character
+                            trie_next_iterator_helper(trie_get_child(cur, b_id), iterator, 1); // Gets next iterator from this root
+                            trie_unlock(&(trie_get_child(cur, b_id)->lock)); // Readlocks the child we are going to use
+                            retval = 1; // Ignores next iterator result. Even the first character added is a good solution!
+                        }
                     }
                 }
                 
@@ -863,14 +871,21 @@ int trie_suffix_iterator_next(trie_ptr_t t, trie_arr_t trie_data, trie_iterator_
                     else // Does a binary search for the first data inside childs
                         a_id = trie_search_in_childs(&b_id, &(cur->childs), trie_iterator_data(iterator)[tmp_len]);
                     
-                    if (b_id == trie_get_child_num(cur)) { // Reached the end, sets the iterator to null
+                    if (b_id >= trie_get_child_num(cur)) { // Reached the end, sets the iterator to null
                         retval = 0; // This forces clearing iterator (next)
                     } else { // Normal case
                         trie_readlock(&(trie_get_child(cur, b_id)->lock)); // Readlocks the child we are going to use
                         if (!a_id) // If not found needs to substitute
                             trie_iterator_substitute_end(iterator, tmp_len, &trie_get_first(cur, b_id), 1); // only one character
-                        retval = trie_next_iterator_helper(trie_get_child(cur, b_id), iterator, tmp_len + 1); // Gets next iterator from that root
+                        retval = trie_next_iterator_helper(trie_get_child(cur, b_id), iterator, tmp_len + 1); // Gets next iterator from this root
                         trie_unlock(&(trie_get_child(cur, b_id)->lock)); // Readlocks next.
+                        if ((retval == 0) && (++b_id < trie_get_child_num(cur))) { // If not found and can move to next data
+                            trie_readlock(&(trie_get_child(cur, b_id)->lock)); // Readlocks the child we are going to use
+                            trie_iterator_substitute_end(iterator, tmp_len, &trie_get_first(cur, b_id), 1); // only one character
+                            trie_next_iterator_helper(trie_get_child(cur, b_id), iterator, tmp_len + 1); // Gets next iterator from this root
+                            trie_unlock(&(trie_get_child(cur, b_id)->lock)); // Readlocks the child we are going to use
+                            retval = 1; // Ignores next iterator result. Even the first character added is a good solution!
+                        }
                     }
                 }
                 

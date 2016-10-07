@@ -213,7 +213,7 @@ static inline void print_trie(trie_ptr_t ptr) {
 
 static inline void print_trie_starting_with(trie_ptr_t ptr) {
     int nfound, res, datalen = (int)ceil(log(MAX_LEN));
-    trie_iterator_t iter;
+    trie_iterator_t iter, iterck; // Iterator and iterator check
     trie_arr_t arr;
     DATA_t str_to_search[MAX_LEN];
     // Now extracts a random smaller string and lists all the data starting with that
@@ -226,8 +226,13 @@ static inline void print_trie_starting_with(trie_ptr_t ptr) {
     
     arr.data = str_to_search;
     arr.len = datalen;
-    arr.alloc = datalen; // Formal
+    arr.alloc = datalen; // Formal, won't be used
     trie_iterator_init(&iter);
+    
+    trie_iterator_init(&iterck);
+    trie_iterator_data(&iterck) = malloc(datalen*sizeof*str_to_search); // Must be allocated with malloc
+    memcpy(trie_iterator_data(&iterck), str_to_search, datalen*sizeof*str_to_search); // Dumps the buffer
+    trie_iterator_data_len(&iterck) = iterck.alloc = datalen; // Lenght and allocated data have the same lenght
 
     nfound = 0; // Number of elements found
     while (trie_suffix_iterator_next(ptr, arr, &iter)) {
@@ -249,9 +254,21 @@ static inline void print_trie_starting_with(trie_ptr_t ptr) {
             dump(ptr, -1, msg); // This function should be called by main thread
             assert(0);
         }
+        
+        if ((nfound != 1) || (trie_iterator_data_len(&iter) != 0))
+            trie_iterator_next(ptr, &iterck); // Gets next iterator
+
+        if (memcmp(trie_iterator_data(&iterck) + datalen, trie_iterator_data(&iter),
+                   trie_iterator_data_len(&iter)*sizeof*trie_iterator_data(&iter)) != 0) {
+            printf("   === ERROR Skipping data ===\n");
+            printf(" Looking for %.*s (%d)\n", trie_iterator_data_len(&iterck), trie_iterator_data(&iterck),
+                                               trie_iterator_data_len(&iterck) );
+            assert(0);
+        }
     }
 
     trie_iterator_clear(&iter);
+    trie_iterator_clear(&iterck);
     if (nfound != 0)
         printf("found: %d\n", nfound);
 //    if (nfound >= 2) // Do not print nothing if nothing was found

@@ -642,7 +642,7 @@ int trie_next_iterator_helper(trie_ptr_t t, trie_iterator_t * iterator, int cur_
             trie_get_first_iterator(next, iterator, cur_offset + trie_data_len(t) + 1);
             return 1; // Success, data modified
         } else {
-            assert(trie_data_end(t)); // Data must end here if no childs!
+            assert(trie_empty_childs(t)?1:trie_data_end(t)); // Data must end here if no childs!
             return 0; // No childs!
         }
     } else if ( (mismatch == trie_data_len(t)) && trie_empty_childs(t) ) { // Reached end of stored data
@@ -790,17 +790,22 @@ int trie_suffix_iterator_next(trie_ptr_t t, trie_arr_t trie_data, trie_iterator_
                         retval = 0; // This forces clearing iterator (next)
                     } else { // Normal case
                         trie_readlock(&(trie_get_child(cur, b_id)->lock)); // Readlocks next first child
-                        if (!a_id) // Not found, need to copy the first character
+                        if (!a_id) { // Not found, need to copy the first character, and restart from a first iterator
                             trie_iterator_substitute_end(iterator, 0, &trie_get_first(cur, b_id), 1); // only one character
-                        retval = trie_next_iterator_helper(trie_get_child(cur, b_id), iterator, 1); // Gets next iterator from this root
-                        trie_unlock(&(trie_get_child(cur, b_id)->lock)); // Readlocks next.
+                            trie_get_first_iterator(trie_get_child(cur, b_id), iterator, 1); // Gets next iterator from this root
+                            retval = 1; // Ignores next iterator result. Even the first character added is a good solution!
+                        } else {
+                            retval = trie_next_iterator_helper(trie_get_child(cur, b_id), iterator, 1); // Gets next iterator from this root
+                            trie_unlock(&(trie_get_child(cur, b_id)->lock)); // Readlocks next.
+                        }
+
                         if ((retval == 0) && (++b_id < trie_get_child_num(cur))) { // If not found and can move to next data
                             trie_readlock(&(trie_get_child(cur, b_id)->lock)); // Readlocks the child we are going to use
                             trie_iterator_substitute_end(iterator, 0, &trie_get_first(cur, b_id), 1); // only one character
-                            trie_next_iterator_helper(trie_get_child(cur, b_id), iterator, 1); // Gets next iterator from this root
-                            trie_unlock(&(trie_get_child(cur, b_id)->lock)); // Readlocks the child we are going to use
+                            trie_get_first_iterator(trie_get_child(cur, b_id), iterator, 1); // Gets next iterator from this root
+                            // Mutex is auto unlocked
                             retval = 1; // Ignores next iterator result. Even the first character added is a good solution!
-                        }
+                        } // else cannot move to next data, retval = 0 in this case
                     }
                 }
                 
@@ -875,15 +880,20 @@ int trie_suffix_iterator_next(trie_ptr_t t, trie_arr_t trie_data, trie_iterator_
                         retval = 0; // This forces clearing iterator (next)
                     } else { // Normal case
                         trie_readlock(&(trie_get_child(cur, b_id)->lock)); // Readlocks the child we are going to use
-                        if (!a_id) // If not found needs to substitute
+                        if (!a_id) { // If not found needs to substitute, and restart from a first iterator
                             trie_iterator_substitute_end(iterator, tmp_len, &trie_get_first(cur, b_id), 1); // only one character
-                        retval = trie_next_iterator_helper(trie_get_child(cur, b_id), iterator, tmp_len + 1); // Gets next iterator from this root
-                        trie_unlock(&(trie_get_child(cur, b_id)->lock)); // Readlocks next.
+                            trie_get_first_iterator(trie_get_child(cur, b_id), iterator, tmp_len + 1); // Gets next iterator from this root
+                            retval = 1;
+                        } else {
+                            retval = trie_next_iterator_helper(trie_get_child(cur, b_id), iterator, tmp_len + 1); // Gets next iterator from this root
+                            trie_unlock(&(trie_get_child(cur, b_id)->lock)); // Readlocks next.
+                        }
+
                         if ((retval == 0) && (++b_id < trie_get_child_num(cur))) { // If not found and can move to next data
                             trie_readlock(&(trie_get_child(cur, b_id)->lock)); // Readlocks the child we are going to use
                             trie_iterator_substitute_end(iterator, tmp_len, &trie_get_first(cur, b_id), 1); // only one character
-                            trie_next_iterator_helper(trie_get_child(cur, b_id), iterator, tmp_len + 1); // Gets next iterator from this root
-                            trie_unlock(&(trie_get_child(cur, b_id)->lock)); // Readlocks the child we are going to use
+                            trie_get_first_iterator(trie_get_child(cur, b_id), iterator, tmp_len + 1); // Gets next iterator from this root
+                            // Mutex is auto unlocked
                             retval = 1; // Ignores next iterator result. Even the first character added is a good solution!
                         }
                     }

@@ -412,6 +412,18 @@ int main(int argc, char * argv[]) {
     // Join all threads
     printf("   === All data added ===\n");
     fflush(stdout);
+
+    // File IO testing. Writes the trie to a file, then reads it again
+    FILE *out = fopen("trie_out.hex", "w");
+    assert(out);
+    trie_fwrite(out, &my_trie);
+    fclose(out);
+    
+    trie_clear(&my_trie); // Clears all the data
+    out = fopen("trie_out.hex", "r");
+    trie_fread(out, &my_trie); // Reads again the same trie
+    fclose(out);
+
     // Now re-creates thread to check data added
     for (i = 0; i < THREAD_NUM; i++) {
         res = pthread_create(tid + i, NULL, check_added_data, &my_trie);

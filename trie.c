@@ -17,6 +17,7 @@
 */
 
 #include <string.h> // memcpy
+#include <limits.h>
 #include "trie.h" // trie data type
 
 // All the utils functions are defined here
@@ -50,7 +51,7 @@ void trie_init(trie_ptr_t t) {
 //  ==== TRIE CLEAR ====
 //  ====================
 
-void trie_clear(trie_ptr_t t) {
+void trie_clear_noroot(trie_ptr_t t) {
     int i;
     if (t == NULL)
         return; // Invalid ptr
@@ -59,6 +60,19 @@ void trie_clear(trie_ptr_t t) {
     for (i = 0; i < trie_get_child_num(t); i++)
         trie_clear(trie_get_child(t, i));
     trie_destroy_node_without_child(t);
+}
+
+// Root node
+void trie_clear(trie_ptr_t t) {
+    int i;
+    if (t == NULL)
+        return; // Invalid ptr
+    trie_writelock(&(t->lock));
+    // Now have to destroy each child
+    for (i = 0; i < trie_get_child_num(t); i++)
+        trie_clear_noroot(trie_get_child(t, i));
+    trie_destroy_node_without_child(t);
+    trie_init(t); // Reinits data
 }
 
 #ifndef NDEBUG // Debugging
@@ -117,6 +131,9 @@ void print_trie(trie_ptr_t t) {
 #else // Not debugging
 #    define print_trie(trie) // Do nothing macro!
 #endif
+
+// input/output utilities
+#include "trie_io.c"
 
 // =====================
 // ====== TRIE ADD =====
@@ -324,9 +341,12 @@ void trie_remove(trie_ptr_t t, const DATA_t * arr, int len) {
         return;
     }
 
+    found = 1; // Assumes 'last' element was found
+    pos = INT_MAX; // Leads to error if used uninitialized
     cur = prev = t;
     while (1) {
         assert(trie_correct_child_num(cur)); // Effectively used chidls less than allocated
+        assert(found); // Go on only while is found
         // Looks for the first mismatching character
         mismatch = find_first_mismatch(arr, len, trie_data(cur), trie_data_len(cur));
 
@@ -443,14 +463,14 @@ int trie_find(trie_ptr_t t, const DATA_t * arr, int len) {
     int a_id, b_id; // identifiers
     struct _trie * cur, * next; // current root pointer (not reallocable)
 
-    if (t == NULL)
+    cur = t;
+    if (cur == NULL)
         return 0; // Invalid ptr
 
-    trie_readlock(&(t->lock)); // locks root trie read mutex
-    if (trie_is_empty(t)) {
+    trie_readlock(&(cur->lock)); // locks root trie read mutex
+    if (trie_is_empty(cur)) {
         retval = 0; // Empty trie
     } else { // Trie not empty (general case)
-        cur = t;
         while (1) {
             // Looks for the first mismatching character
             mismatch = find_first_mismatch(arr, len, trie_data(cur), trie_data_len(cur));
@@ -512,14 +532,14 @@ int trie_get_suffix(trie_ptr_t t, const DATA_t * arr, int len, trie_arr_t * suff
     int a_id, b_id; // identifiers
     struct _trie * cur, * next; // current root pointer (not reallocable)
 
-    if (t == NULL)
+    cur = t;
+    if (cur == NULL)
         return TRIE_NO_SUFFIX_FOUND; // Invalid ptr
 
-    trie_readlock(&(t->lock)); // locks root trie read mutex
-    if (trie_is_empty(t)) {
+    trie_readlock(&(cur->lock)); // locks root trie read mutex
+    if (trie_is_empty(cur)) {
         retval = TRIE_NO_SUFFIX_FOUND; // Empty trie
     } else { // Trie not empty (general case)
-        cur = t;
         while (1) {
             // Looks for the first mismatching character
             mismatch = find_first_mismatch(arr, len, trie_data(cur), trie_data_len(cur));
@@ -601,10 +621,6 @@ int trie_get_suffix(trie_ptr_t t, const DATA_t * arr, int len, trie_arr_t * suff
 static inline // Gets first useful iterator. This function always succedes
 void trie_get_first_iterator(trie_ptr_t t, trie_iterator_t * iterator, int offset) {
     struct _trie * cur, *next;
-    if (offset > trie_iterator_data_len(iterator)) {
-        printf("Error here\n");
-        fflush(stdout);
-    }
     assert(offset <= trie_iterator_data_len(iterator));
 
     cur = t; // Asserts t was already readlocked
@@ -741,20 +757,17 @@ int trie_suffix_iterator_next(trie_ptr_t t, trie_arr_t trie_data, trie_iterator_
     int tmp_len; // Temporany
     int a_id, b_id; // identifiers
     struct _trie * cur, * next; // current root pointer (not reallocable)
-    
-    if (t == NULL || iterator == NULL) // Invalid pointers
+   
+    cur = t; 
+    if (cur == NULL || iterator == NULL) // Invalid pointers
         return 0;
 
-    // First of all reachs the end of the data
+    // First of all reachs the end of the data to search (trie_data arr)
 
-    if (t == NULL)
-        return 0; // Invalid ptr
-
-    trie_readlock(&(t->lock)); // locks root trie read mutex
-    if (trie_is_empty(t)) {
+    trie_readlock(&(cur->lock)); // locks root trie read mutex
+    if (trie_is_empty(cur)) {
         retval = 0; // Empty trie
     } else { // Trie not empty (general case)
-        cur = t;
         while (1) {
             // Looks for the first mismatching character
             mismatch = find_first_mismatch(trie_data.data, trie_data.len, trie_data(cur), trie_data_len(cur));
@@ -830,8 +843,9 @@ int trie_suffix_iterator_next(trie_ptr_t t, trie_arr_t trie_data, trie_iterator_
                     trie_data.len -= (mismatch + 1); // Lenght of remaining data reduces
                     cur = next;
                     continue; // Continues while loop
-                } else { // Element was not found, inserts a new one
-                    retval = 0; break;
+                } else { // Element was not found
+                    retval = 0;
+                    break;
                 }
             } else if (mismatch == trie_data.len) { // Middle of the data, data stored is longer
                 // Suffix will be made with a part of the current data, and the childs data
@@ -851,8 +865,11 @@ int trie_suffix_iterator_next(trie_ptr_t t, trie_arr_t trie_data, trie_iterator_
                         retval = -1; // Shorter data comes before, use the first algorithm
                     } else if (retval > 0) { // got over the rest of the data, skips
                         trie_iterator_clear(iterator); // This sets as last iterator (i.e. the NULL iterator)
-                        retval = 0; break; // Returns a not found, as usual
+                        retval = 0; // Might not go on, retval might lead to executing other things
+                        break; // Returns a not found, as usual
                     }
+                } else { // This is the first iterator
+                    retval = -1; // Forces execution of first al
                 }
 
                 // if never got here, or first useful data here is after the iterator, then must choose the

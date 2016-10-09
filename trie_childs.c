@@ -34,23 +34,28 @@
 
 // This function only allocs space, it does not initializes new child
 static inline
-void trie_add_first_two_childs(struct _childs * const childs) {
-    childs->child_alloc = 2; // For the first allocs two childrens
+void trie_add_first_n_childs(struct _childs * const childs, int n) {
     assert(childs->childs == NULL && childs->firsts == NULL); // First time here
+    childs->child_alloc = n; // For the first allocs two childrens
     childs->childs = malloc((childs->child_alloc)*sizeof*(childs->childs));
     childs->firsts = malloc((childs->child_alloc)*sizeof*(childs->firsts));
-    assert(childs->childs != NULL && childs->firsts != NULL);
-    childs->child_num = 2;
+    assert(childs->childs != NULL && childs->firsts != NULL); // Both success
+    childs->child_num = n;
+}
+
+static inline
+void trie_add_first_two_childs(struct _childs * const childs) {
+    trie_add_first_n_childs(childs, 2); // Allocs two
 }
 
 // As the function above, it does not initialize new child
 static inline
 void trie_add_first_child(struct _childs * const childs) {
     trie_add_first_two_childs(childs); // allocs twice
-    childs->child_num = 1;
+    childs->child_num = 1; // But uses one
 }
 
-static inline
+static inline // No childs, used only for root node
 void trie_alloc_childs(struct _childs * const childs) {
     trie_add_first_two_childs(childs); // allocs twice
     childs->child_num = 0;

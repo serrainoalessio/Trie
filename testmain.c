@@ -10,7 +10,7 @@
 
 #define MAX_LEN 12 // Maximum lenght of each string
 #define THREAD_NUM 32 // Threads adding
-#define REPS 500 // Number of strings each thread adds
+#define REPS 1000 // Number of strings each thread adds
 #define SUFFIX_REPS 200 // Number of suffix test strings
 
 pthread_mutex_t lock;

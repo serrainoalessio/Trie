@@ -178,9 +178,20 @@ void trie_fread(FILE * fp, trie_ptr_t t) {
     // === Reads childs === (exactly as above)
     fread(&trie_get_child_num(t), sizeof(trie_get_child_num(t)), 1, fp); // First stores child num
     assert(trie_get_child_num(t) >= 0);
-    trie_add_first_n_childs(&(t->childs), trie_get_child_num(t));
-    for (i = 0; i < trie_get_child_num(t); i++) // Now for each child
-        __trie_fread_node(fp, t, i); // t is new parent, i means i-th child
+    if (trie_get_child_num(t) != 0) { // Normal case
+        trie_add_first_n_childs(&(t->childs), trie_get_child_num(t));
+        for (i = 0; i < trie_get_child_num(t); i++) // Now for each child
+            __trie_fread_node(fp, t, i); // t is new parent, i means i-th child
+    } else { // Empty childs, it might means empty trie or not
+        if (trie_data_len(t) == 0 && ! trie_data_end(t)) { // Empty trie
+            trie_get_childs(t) = NULL; // No children for the root node
+            free((DATA_t*)trie_data(t));
+            t->data.dealloc = 0; // Already freed
+        } else {
+            trie_init_childs(&(t->childs)); // Inits root node (it should be already initialized)
+            trie_alloc_childs(&(t->childs)); // Allocs two children for the root node
+        }
+    }
 }
 
 // Merges a read trie

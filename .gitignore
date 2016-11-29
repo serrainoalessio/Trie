@@ -1,2 +1,6 @@
 .*.swp
+*.out
+*.a
 a.out
+main.c
+build.sh

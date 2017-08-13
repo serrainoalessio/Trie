@@ -31,6 +31,7 @@ void trie_readlock(struct _rwlock * rw) {
     res = pthread_rwlock_rdlock(&(rw->rwlock));
     if (res != 0)
         assert(res == 0);
+    (void)res; // Uses res, suppress warning (optimization should remove res)
 }
 
 static inline
@@ -42,6 +43,7 @@ void trie_writelock(struct _rwlock * rw) {
 #endif
     res = pthread_rwlock_wrlock(&(rw->rwlock));
     assert(res == 0);
+    (void)res; // Uses res, suppress warning (optimization should remove res)
 }
 
 static inline
@@ -56,8 +58,9 @@ void trie_readlock_upgrd(struct _rwlock * rw) {
 static inline // Returns 1 if success, or zero if another thread gained the lock
 int trie_upgrade_lock(struct _rwlock * rw) {
     int retval;
+    int res;
 #ifndef USE_NOT_UPGRADABLE_MUTEX
-    int lock_result, res;
+    int lock_result; // Needed to know if mutex has been locked or not
     lock_result = pthread_mutex_trylock(&(rw->upgrade)); // Tries to lock the mutex
     assert(lock_result == 0 || lock_result == EBUSY);
     res = pthread_rwlock_unlock(&(rw->rwlock)); // Releases the lock
@@ -81,6 +84,7 @@ int trie_upgrade_lock(struct _rwlock * rw) {
     (void)rw; // Suppresses warning unused
     retval = 0; // Always success, expect to call upgrade lock on writelocks
 #endif
+    (void)res; // Uses res, suppress warning (optimization should remove res)
     return retval;
 }
 
@@ -93,6 +97,7 @@ void trie_unlock(struct _rwlock * rw) {
     res = pthread_rwlock_unlock(&(rw->write_peeding));
     assert(res == 0);
 #endif
+    (void)res; // Uses res, suppress warning (optimization should remove res)
 }
 
 static inline

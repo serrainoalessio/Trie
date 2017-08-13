@@ -76,7 +76,11 @@ int trie_iterator_next(trie_ptr_t t, trie_iterator_t * iterator); // 1 if succes
 int trie_suffix_iterator_next(trie_ptr_t t, trie_arr_t trie_data, trie_iterator_t * iterator);
 
 #include <stdio.h> // File input/output
-void trie_fwrite(FILE * fp, trie_ptr_t t); // Writes binary data, readable by fread
-void trie_fread(FILE * fp, trie_ptr_t t); // Reads binary data produced by fwrite
+// Both functions return SUCCESS in case of success, or FAIL in case of fail
+#define SUCCESS 0
+#define FAIL   -1
+int trie_fwrite(FILE * fp, trie_ptr_t t); // Writes binary data, readable by fread
+int trie_fread(FILE * fp, trie_ptr_t t); // Reads binary data produced by fwrite
+int trie_fread_merge(FILE * fp, trie_ptr_t t); // Reads and merges to an existing trie
 
 #endif // TRIE_H defined

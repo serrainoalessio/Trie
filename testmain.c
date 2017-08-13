@@ -401,7 +401,7 @@ int main(int argc, char * argv[]) {
     }
 
     asm volatile ("":::"memory"); // Memory barrier
-                    // (avoid compiler reorcer instructions crossing the barrier)
+                    // (avoid compiler reorder instructions crossing the barrier)
 
     for (i = 0; i < THREAD_NUM; i++) {
         res = pthread_create(tid + i, NULL, add_data, &my_trie);
@@ -416,13 +416,15 @@ int main(int argc, char * argv[]) {
     // File IO testing. Writes the trie to a file, then reads it again
     FILE *out = fopen("trie_out.hex", "w");
     assert(out);
-    trie_fwrite(out, &my_trie);
+    res = trie_fwrite(out, &my_trie);
     fclose(out);
+    assert(res == SUCCESS);
     
     trie_clear(&my_trie); // Clears all the data
     out = fopen("trie_out.hex", "r");
-    trie_fread(out, &my_trie); // Reads again the same trie
+    res = trie_fread(out, &my_trie); // Reads again the same trie
     fclose(out);
+    assert(res == SUCCESS);
 
     // Now re-creates thread to check data added
     for (i = 0; i < THREAD_NUM; i++) {

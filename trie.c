@@ -18,6 +18,7 @@
 
 #include <string.h> // memcpy
 #include <limits.h>
+#include <assert.h>
 #include "trie.h" // trie data type
 
 // All the utils functions are defined here
